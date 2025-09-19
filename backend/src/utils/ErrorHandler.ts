@@ -1,6 +1,6 @@
 // we use oops here make object orient class
  
-// extends Error is buildin js Error class
+// extends Error is building js Error class
 class ErrorHandler extends Error{      
     statusCode:Number;
 

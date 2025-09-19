@@ -6,11 +6,11 @@ export interface IAccount extends Document{
     name:string;
     email:string;
     password:string;
-    // avatar:{
-    //     public_id:string;
-    //     url:string
-    // };
-    avatar:string;
+    avatar?:{
+        public_id:string;
+        url:string
+    };
+    // avatar:string;
     isVerified:boolean;
     courses:Array<{CourseId:string}>;
     role:string;
@@ -33,13 +33,13 @@ const AccountSchema :Schema<IAccount> = new mongoose.Schema({
         type:String,
         // required:true
     },
-    avatar:{
-        type:String,
-    },
     // avatar:{
-    //    public_id:String,
-    //    url:String
+    //     type:String,
     // },
+    avatar:{
+       public_id:String,
+       url:String
+    },
     isVerified:{
         type:Boolean,
         default:false,

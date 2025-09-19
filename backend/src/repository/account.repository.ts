@@ -12,6 +12,8 @@ import {SendMail} from '../utils/sendMail';
 import { accessTokenOptions, refreshTokenOptions, sendToken } from "../utils/jwt";
 import { redis } from "../db/redis";
 import { getUserById } from "../service/account.service";
+import  {v2 as cloudinary} from "cloudinary";
+
 
 dotenv.config();
 
@@ -180,7 +182,7 @@ export const logoutUser = CatchAsyncError(
 
 
 // update access token
-export const updateAccessToken = CatchAsyncError(async(req:Request, res:Response,next:NextFunction)=>{
+export const updateAccessToken = CatchAsyncError(async(req:any, res:Response,next:NextFunction)=>{
   try{
      const refresh_token = req.cookies.refresh_token;
      const decode = jwt.verify(refresh_token, process.env.REFRESH_TOKEN as string)as JwtPayload;
@@ -204,6 +206,7 @@ export const updateAccessToken = CatchAsyncError(async(req:Request, res:Response
       expiresIn:'3d'
      });
 
+     req.user = user;
      res.cookie("access_token", accessToken, accessTokenOptions);
      res.cookie("refresh_token", refreshToken, refreshTokenOptions);
 
@@ -264,15 +267,150 @@ export const updateUserInfo = CatchAsyncError(
     try{
        const {email, name} = req.body as IUpdateUserInfo;
        const userId = req.user._id;
-       const user = await Account.findOne({userId});
+       console.log("userId",userId);
+       const user = await Account.findById(userId);
+           console.log("user",user);
+       if(email && user){
+        const isEmailExist:any = Account.findOne({email});
+        if(isEmailExist){
+          return next(new ErrorHandler("Email already exists",400));
+        }
+        user.email = email
+       }
 
-       
+       if(user && name){
+        user.name = name
+       }
+       await user?.save();
+       await redis.set(userId,JSON.stringify(user));
+       res.status(200).json({
+        status:"success",
+        user
+       })
     }catch(error:any){
       return next(new ErrorHandler(error.message, 400))
     }
   }
 )
 
+interface IUpdatePassword{
+  newPassword:string,
+  oldPassword:string
+}
+
+export const updatePassword = CatchAsyncError(
+  async(req:any, res:Response, next:NextFunction)=>{
+    try{
+      const {newPassword, oldPassword} = req.body as IUpdatePassword;
+      if(!oldPassword || !newPassword){
+        return next(new ErrorHandler("Please enter old and new password",400));
+      }
+      const user:any = await Account.findById(req.user._id).select("+password");
+      if(user.password === undefined){
+        return next(new ErrorHandler("Invalid User",400));
+      }
+      const isPasswordMatch = await  user?.comparePassword(oldPassword);
+
+      if(!isPasswordMatch){
+          return next(new ErrorHandler("Invalid old password",400));
+      }
+      user.password = newPassword;
+      
+      await user.save();
+      await redis.set(req.user?._id, JSON.stringify(user))
+      res.status(200).json({
+        success:true,
+        user,
+      })
+    }catch(error:any){
+        return next(new ErrorHandler(error.message, 400));
+    }
+  })
+
+
+ //update profile picture
+ export const updateProfilePicture = CatchAsyncError(
+  async(req:any, res:Response,next:NextFunction)=>{
+    try{
+      const {avatar}= req.body;
+      const userId = req.user?._id;
+      console.log("UserIDDDD",userId);
+      const user = await Account.findById(userId);
+       console.log("userrrr",user);
+    //   if(avatar && user){
+    //     // if user have own avatar  then call this if
+    //   if(user?.avatar?.public_id){
+    //     // first delete the old one
+    //    await cloudinary.uploader.destroy(user?.avatar?.public_id);
+    //    const myCloud = await cloudinary.uploader.upload(avatar,{
+    //     folder:"avatars",
+    //     width:150,
+    //   });
+    //   console.log("myCloud",myCloud);
+    //   user.avatar={
+    //     public_id:myCloud?.public_id,
+    //     url:myCloud?.secure_url
+    //   }
+    //   }else{
+    //     console.log("else")
+    //     const myCloud = await cloudinary.uploader.upload(avatar,{
+    //       folder:"avatars",
+    //       width:150,
+    //        crop: "scale"
+    //     });
+    //     console.log("myCloud",myCloud);
+    //     user.avatar={
+    //       public_id:myCloud?.public_id,
+    //       url:myCloud?.secure_url
+    //     }
+    //   }
+    // }
+
+
+    if (avatar && user) {
+      // If the user has an avatar already
+      if (user?.avatar?.public_id) {
+          try {
+              // First, delete the old one
+              await cloudinary.uploader.destroy(user.avatar.public_id);
+          } catch (err) {
+              console.error("Error deleting old avatar:", err);
+              return next(new ErrorHandler("Failed to delete old avatar", 500));
+          }
+      }
+
+      try {
+          // Upload the new avatar
+          const myCloud = await cloudinary.uploader.upload(avatar, {
+              folder: "avatars",
+              width: 150,
+              crop: "scale"
+          });
+          console.log("myCloud", myCloud);
+
+          user.avatar = {
+              public_id: myCloud.public_id,
+              url: myCloud.secure_url,
+          };
+      } catch (err) {
+          console.error("Error uploading new avatar:", err);
+          return next(new ErrorHandler("Failed to upload new avatar", 500));
+      }
+  }
+
+  
+    await user?.save();
+    await redis.set(userId,JSON.stringify(user));
+    
+    res.status(200).json({
+      success:true,
+      user
+    })
+    }catch(error:any){
+      return next(new ErrorHandler(error.message,400))
+    }
+  }
+ ) 
 // async function hashPassword(password: string) {
 //   const salt_rounds = process.env.SALT_ROUNDS;
 //   if (!salt_rounds) {

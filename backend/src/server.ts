@@ -5,8 +5,16 @@ import cookieParser from 'cookie-parser';
 import './db/db';
 import MainRouter from './routes/index.route';
 import { ErrorMiddleware } from './middlewares/error';
+import {v2 as cloudinary} from "cloudinary"
 
 dotenv.config();
+
+cloudinary.config({
+    cloud_name: process.env.CLOUD_NAME,
+    api_key: process.env.CLOUD_API_KEY,
+    api_secret: process.env.CLOUD_SECRET_KEY,
+})
+console.log('Cloudinary Config:', cloudinary.config());
 
 const PORT = parseInt(process.env.PORT || "9000", 10);
 const app = express();
